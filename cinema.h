@@ -1,0 +1,38 @@
+#ifndef CINEMA_H_
+#define CINEMA_H_
+
+#include <pthread.h>
+
+
+//generico posto in una fila
+struct posto {
+	int codice;
+	int codice_fila;
+	int is_prenotato;
+};
+
+//generica fila in un settore
+struct fila{
+	int codice;
+	int nPostiLiberi;
+	int nPosti;
+	struct posto* posti;
+	pthread_mutex_t mx_fila;
+};
+
+//settore dello stadio
+struct sala_cinema{
+	int codice;
+	int nFile;
+	struct fila* file;
+	int postiDisponibili;
+	pthread_mutex_t mx_aggiornamentoSala;
+};
+
+struct prenotazione{
+	int nPosti;
+	struct posto* posti_prenotati;
+};
+
+struct sala_cinema sala;
+#endif /*STADIOOLIMPICO_H_*/
