@@ -1,5 +1,5 @@
 LIB = -lpthread
-PORT = 5050
+PORT = 5001
 
 all: gestioneSala.o server.o client.o
 	$(CC) server.o gestioneSala.o -o server $(LIB)

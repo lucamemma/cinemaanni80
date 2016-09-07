@@ -23,28 +23,27 @@ void creaFilePosti(int i, int nfile, int npostifila){
 		for (k = 0; k < npostifila; k++){
 			sala.file[j].posti[k].codice = k;
 			sala.file[j].posti[k].codice_fila = j;
-			sala.file[j].posti[k].is_prenotato = 0;
+			sala.file[j].posti[k].prenotato = 0;
 		}
 		sala.file[j].codice = j;
 		sala.file[j].nPostiLiberi = npostifila;
-		pthread_mutex_init(&sala.file[j].mx_fila,NULL);
+		//pthread_mutex_init(&sala.file[j].mx_fila,NULL);
 	}
 }
 // inizializza sala cinema TODO : controllare per sala già esistente
 void inizializzaSala(){
 	int i;
-	int nfile=0;
-	int npostifila=0;
+	int nfile=9;
+	int npostifila=20;
 	int costoIntero=0;
 	pthread_mutexattr_t attr;
 
 	//inizializzo sala
-		nfile = 35;
-		npostifila = 30;
-		costoIntero = 20;
 		creaFilePosti(i, nfile, npostifila);
 
 		sala.postiDisponibili = nfile * npostifila;
+    pre_index = 0;
+    prelazioni = malloc(sizeof(struct prelazione)); //da ingrandire all'inserimento di una nuova prelazione
 		//strcpy(settori[i].nome,nomiSettori[i]);
 		pthread_mutexattr_init(&attr);
 		pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK_NP);
@@ -59,7 +58,7 @@ void stampaSala(struct sala_cinema s){
 	int j,k;
 	for (j = 0; j < s.nFile; j++){
 		for (k = 0; k < s.file[j].nPosti; k++){
-			printf("%d\n", s.file[j].posti[k].is_prenotato);
+			printf("%d", s.file[j].posti[k].prenotato);
 		}
 		printf("\n");
 	}

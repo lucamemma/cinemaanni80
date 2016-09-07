@@ -2,13 +2,14 @@
 #define CINEMA_H_
 
 #include <pthread.h>
-
+#define CODLEN 6
+#define NONDIS "NONDIS"
 
 //generico posto in una fila
 struct posto {
 	int codice;
 	int codice_fila;
-	int is_prenotato;
+	int prenotato;
 };
 
 //generica fila in un settore
@@ -34,5 +35,12 @@ struct prenotazione{
 	struct posto* posti_prenotati;
 };
 
-struct sala_cinema sala;
+struct sala_cinema sala; //variabile condivisa thread server
+
+struct prelazione {
+	char *id;
+	struct posto* posti_p;
+};
+unsigned int pre_index;
+struct prelazione *prelazioni; //lista prenotazioni attive
 #endif /*STADIOOLIMPICO_H_*/
