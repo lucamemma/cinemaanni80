@@ -2,9 +2,8 @@
 #define GESTIONESALA_H_
 
 #include "cinema.h"
-#define DEB 1
 
-void deb(int d, char* s);
+char** split_line(char* s);
 void inizializzaSala();
 void creaFilePosti(int i, int nfile, int npostifila);
 void stampaSala(struct sala_cinema s);

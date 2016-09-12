@@ -7,6 +7,7 @@
 #include <netdb.h>
 #include <errno.h>        /* gestione degli errori */
 #include <unistd.h>
+#include <signal.h>
 
 #include "gestioneSala.h"
 
@@ -25,33 +26,33 @@ void stampaComandi(){
 
 //legge dal server le informazioni con la descrizione
 void readInfoFromserver(int socket){
-	//TODO aggiungere controllo MUTEX
 	int i, j, n_file, n_posti, cod, cod_fila, pren;
 	//riceve numero file
+
 	if (recv(socket, &(n_file), sizeof(int),0)< 0) {
-		printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+		printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 		exit(1);
 	}
-	printf("%d\n",n_file);
+	//printf("%d\n",n_file);
 	for(i=0; i<n_file; i++){
 		//riceve numero posti pre ogni fila
 		if (recv(socket, &(n_posti), sizeof(int),0)< 0) {
-			printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+			printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 			exit(1);
 		}
-		printf("%d ",n_posti);
+		printf("%d ",i);
 		for(j=0; j<n_posti; j++){
 			//INT codice, INT codice_fila,INT prenotato. manda i dati struttura posto
 			if (recv(socket, &(cod), sizeof(int),0)< 0) {
-				printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+				printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 				exit(1);
 			}
 			if (recv(socket, &(cod_fila), sizeof(int),0)< 0) {
-				printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+				printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 				exit(1);
 			}
 			if (recv(socket, &(pren), sizeof(int),0)< 0) {
-				printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+				printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 				exit(1);
 			}
 			printf("%d",pren);
@@ -69,7 +70,6 @@ int * input_posto(char* s){ //side effect su fila e posto
 	strcpy(p,s);
 	int i =0;
 	p = strtok(s, "/");
-	printf("[INPUT_POSTO] %s\n", p);
 	while(p != NULL) {
     printf("%s\n", p);
 		if(i==0) ret[0] = atoi(p);
@@ -83,49 +83,44 @@ int * input_posto(char* s){ //side effect su fila e posto
 void effettuaPrenotazione(int socket){
 	struct posto* prenotazione;
 	//l'utente inserisce una lista di posti e cerca di prenotarli
-	printf("EFFETTUA prenotazione\n");
+
 	int i, n_posti;
 	char buf[16];
 	printf("Numero di posti da prenotare: ");
 	gets(buf);
 	n_posti = atoi(buf);
-	//printf("%d\n", n_posti);
-	//printf("%s\n", buf);
+
 	prenotazione=malloc(sizeof(struct posto)*n_posti);
-	/*else{
-		printf("non abbastanza posti, bitch\n");
-		exit(1);
-	}*/
+
 	memset(buf, 0, sizeof(buf));
 	int *p = malloc(sizeof(int)*2);
 	for(i=0; i<n_posti;i++) {
-		//printf("%d\n", i);
 		printf("Posto %d : ", i);
 		gets(buf);
 		p = input_posto(buf);
-		printf("[POSTO LETTO] %d/%d \n", p[0],p[1]);
+		//printf("[POSTO LETTO] %d/%d \n", p[0],p[1]);
 		prenotazione[i].codice_fila = p[0];
 		prenotazione[i].codice = p[1];
 		prenotazione[i].prenotato=1;
 	}
 	//manda lunghezza prenotazione
 	if (send(socket, &(n_posti), sizeof(int),0)< 0) {
-		printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+		printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 		exit(1);
 	}
 
 	//INT codice, INT codice_fila,INT prenotato. manda l'array prenotazione
 	for(i=0; i<n_posti; i++){
 		if (send(socket, &(prenotazione[i].codice), sizeof(int),0)< 0) {
-			printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+			printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 			exit(1);
 		}
 		if (send(socket, &(prenotazione[i].codice_fila), sizeof(int),0)< 0) {
-			printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+			printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 			exit(1);
 		}
 		if (send(socket, &(prenotazione[i].prenotato), sizeof(int),0)< 0) {
-			printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+			printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 			exit(1);
 		}
 		//printf("%d",pren);
@@ -134,12 +129,13 @@ void effettuaPrenotazione(int socket){
 	char* conferma = malloc(sizeof(char)*CODLEN);
 
 	if (recv(socket, conferma, sizeof(char)*CODLEN,0)< 0){
-		printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+		printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 		exit(1);
 	}
 	if(strcmp(conferma,NONDIS)!=0){
 		printf("\n-----------------ATTENZIONE-------------\n");
 		printf("Questo è il codice prenotazione: %s\n\n",conferma);
+		printf("\n----------------------------------------\n");
 		//sono validi, conferma contiene codice prenotazione
 	}
 	else{
@@ -151,13 +147,13 @@ void effettuaPrenotazione(int socket){
 
 void annullaPrenotazione(int socket){
 	printf("ANNULLA prenotazione \n");
-	printf("Inserire codice prenotazione: \n");
+	printf("Inserire codice prenotazione: ");
 	char cod_pre[CODLEN];
 	gets(cod_pre);
 	printf("%s\n", cod_pre);
 	//leggo e invio cod pren
 	if (send(socket, cod_pre, sizeof(char)*CODLEN,0)< 0) {
-		printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+		printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 		exit(1);
 	}
 
@@ -191,7 +187,7 @@ int main(int argc, char** argv) {
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 
 	if( sock < 0 ) {
-		printf("<CLIENT %d - ERR> Errore %s nella creazione della socket\n",getpid(),strerror(errno));
+		printf("[CLIENT-ERR- %d] Errore %s nella creazione della socket\n",getpid(),strerror(errno));
 		exit(1);
 	}
 	server.sin_family = AF_INET;
@@ -200,16 +196,15 @@ int main(int argc, char** argv) {
 
 	// connessione
 	if( connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0 ) {
-		printf("<CLIENT %d - ERR> Errore %s durante la connect\n",getpid(),strerror(errno));
+		printf("[CLIENT-ERR- %d] Errore %s durante la connect\n",getpid(),strerror(errno));
 		exit(1);
 	}
-	printf("<CLIENT %d - INFO> Numero socket %d\n",getpid(),sock);
-	printf("<CLIENT %d - INFO> Connesso a %s, porta %d\n",getpid(),argv[1],ntohs(server.sin_port));
+	printf("[CLIENT - INFO - %d] Numero socket %d\n",getpid(),sock);
+	printf("[CLIENT - INFO - %d] Connesso a %s, porta %d\n",getpid(),argv[1],ntohs(server.sin_port));
 	//messaggio benvenuto
 	int operazione;
 	char op[16];
 	while(1){
-		deb(DEB, "main loop");
 		//presentazione
 		stampaComandi();
 		printf("Scegliere comando\n");
@@ -217,13 +212,12 @@ int main(int argc, char** argv) {
 
 		//TODO controlli su operazione
 		if(send(sock, op , sizeof(op),0) <0) {
-			printf("<CLIENT %d - ERR> Errore %s durante la write nella socket\n",getpid(),strerror(errno));
+			printf("[CLIENT-ERR- %d] Errore %s durante la write nella socket\n",getpid(),strerror(errno));
 			exit(1);
 		}
 		operazione = atoi(op);
 		switch (operazione) {
 			case 1:   //guarda posti disponibili
-				deb(DEB, "read from server");
 				readInfoFromserver(sock); //legge i dati della sala dal server TODO
 				break;
 			case 2:   //prenota posti
@@ -233,34 +227,12 @@ int main(int argc, char** argv) {
 				annullaPrenotazione(sock);  //TODO annulla prenotazione
 				break;
 			default:
+			close(sock);
 				exit(1);
 				break;
 		}
-		/*
-		//acquisisco l'input
-		prendiPrenotazione(mode, prenotazione);
-
-		//condizione d'uscita
-		if (prenotazione[0]==0)
-			break;
-
-		//scelta del settore e del numero di posti adiacenti
-		if( write(sock,&prenotazione, sizeof(prenotazione) ) <0 ) {
-			printf("<CLIENT %d - ERR> Errore %s durante la write nella socket\n",getpid(),strerror(errno));
-			exit(1);
-		}
-		else {
-			//leggo il risultato dal server
-			if( read(sock,&result, sizeof(result)) < 0 )	 {
-				printf("<CLIENT %d - ERR> Errore %s durante la read dalla socket\n",getpid(),strerror(errno));
-				exit(1);
-			}
-			printf("\n----> <CLIENT %d - INFO>\n%s\n",getpid(),result);
-		}
-		//leggo la nuova situazione dei settori
-		readInfoFromserver(sock);*/
 	}
 	close(sock);
-	printf("<CLIENT %d - INFO> Grazie e Buona Visione!!!\n",getpid());
+	printf("[CLIENT - INFO - %d] Grazie e Buona Visione!!!\n",getpid());
 	exit(0);
 }

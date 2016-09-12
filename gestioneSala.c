@@ -2,19 +2,91 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include "cinema.h"
+#include "gestioneSala.h"
+#define FILE_S "sala.txt"
 /*
  * Metodo di supporto all'inizializzazione dello stadio: alloca lo spazio nello heap
  * per le file del settore i-esimo e per i posti di tali file.
  * Inizializza file e posti del settore i-esimo.
  */
- void deb(int d, char* s){
-	 if(d) printf("<DEBUG> - %s\n", s);
- }
+
+char** split_line(char* s){ //side effect su fila e posto
+	char* p=malloc(sizeof(char)*1024);
+	static char** ret;
+  ret = malloc(sizeof(char*)*2);
+  ret[0]=malloc(sizeof(char)*16);
+  ret[1]=malloc(sizeof(char)*1024);
+	strcpy(p,s);
+	int i =0;
+	p = strtok(s, " ");
+	printf("[INPUT_POSTO] %s\n", p);
+	while(p != NULL) {
+   printf("%s\n", p);
+		if(i==0) strcpy(ret[0],p);
+		else if(i==1) strcpy(ret[1],p);
+   p = strtok(NULL, " ");
+		i++;
+	}
+	return ret;
+}
+
 void creaFilePosti(int i, int nfile, int npostifila){
-	//TODO controllare se esiste già una sala (su file)
-	int j,k;
+
+  char line[1024];
+  FILE *f = fopen(FILE_S, "r");
+  if(f!=NULL){
+    //esiste sala!!
+    if(fgets(line,sizeof(line),f)==NULL){
+      //eof allora esite file, ma vuoto
+    }
+    else{
+      //esiste sala salvata
+      //prima riga nFile, primo el riga nPosti
+      int n_file = atoi(line);
+      printf("-%s\n", line);
+      printf("%d\n", n_file);
+      int i,j;
+      sala.nFile = n_file;
+    	sala.file = malloc(sizeof(struct fila)*n_file);
+      for(j=0; j<n_file; j++){
+        fgets(line,sizeof(line),f);
+        int n_posti;
+        char filara[1024];
+        char** ret=malloc(sizeof(char*)*2);
+        ret[0] = malloc(sizeof(char)*16);
+        ret[1] = malloc(sizeof(char)*1014);
+        ret = split_line(line);
+        printf("%s - %s\n",ret[0],ret[1]);
+        //n_posti = atoi(ret[0]);
+        n_posti=20;
+
+        sala.file[j].nPosti = n_posti;
+    		sala.file[j].posti = malloc(sizeof(struct posto)*n_posti);
+        printf("OK-4\n");
+        strcpy(filara, ret[1]);
+        printf("OK-5\n");
+        for(i=0; i<n_posti;i++){
+          printf("OK-6\n");
+          sala.file[j].posti[i].codice = i;
+          printf("OK-7\n");
+          sala.file[j].posti[i].codice_fila = j;
+          printf("OK-8\n");
+          int c;
+          if(filara[i]=='0') c=0;
+          else c=1;
+          sala.file[j].posti[i].prenotato = c;
+          printf("OK-9\n");
+        }
+        sala.file[j].codice = j;
+    		sala.file[j].nPostiLiberi = npostifila;
+      }
+      fclose(f);
+    }
+  }else{
+  int j,k;
 	sala.nFile = nfile;
 	sala.file = malloc(sizeof(struct fila)*nfile);
 	for (j = 0; j < nfile; j++){
@@ -29,8 +101,8 @@ void creaFilePosti(int i, int nfile, int npostifila){
 		sala.file[j].nPostiLiberi = npostifila;
 		//pthread_mutex_init(&sala.file[j].mx_fila,NULL);
 	}
+  }
 }
-// inizializza sala cinema TODO : controllare per sala già esistente
 void inizializzaSala(){
 	int i;
 	int nfile=9;
@@ -42,103 +114,41 @@ void inizializzaSala(){
 		creaFilePosti(i, nfile, npostifila);
 
 		sala.postiDisponibili = nfile * npostifila;
-    pre_index = 0;
-    prelazioni = malloc(sizeof(struct prelazione)); //da ingrandire all'inserimento di una nuova prelazione
-		//strcpy(settori[i].nome,nomiSettori[i]);
+
 		pthread_mutexattr_init(&attr);
 		pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK_NP);
 		pthread_mutex_init(&sala.mx_aggiornamentoSala,&attr);
 		pthread_mutexattr_destroy(&attr);
 
+    pthread_mutexattr_init(&attr);
+		pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK_NP);
+		pthread_mutex_init(&sala.mx_aggiornamentoFilePrenotazioni,&attr);
+		pthread_mutexattr_destroy(&attr);
+
+    char line[CODLEN];
+    //cerco se esiste già un cod da cui partire
+    FILE *f = fopen("codice.txt","r");
+    if(f!=NULL){
+      if(fgets(line,sizeof(line),f)!=NULL){
+        strcpy(COD_PREN,line);
+        fclose(f);
+      }
+    }
+    else{
+      strcpy(COD_PREN,"0");
+    }
 		printf("<SERVER-INFO> cinema Inizializzato\n");
 }
 
 //stampa sala
 void stampaSala(struct sala_cinema s){
 	int j,k;
+  pthread_mutex_lock(&(sala.mx_aggiornamentoSala));
 	for (j = 0; j < s.nFile; j++){
 		for (k = 0; k < s.file[j].nPosti; k++){
-			printf("%d", s.file[j].posti[k].prenotato);
+			printf("%d  ", s.file[j].posti[k].prenotato);
 		}
 		printf("\n");
 	}
+  pthread_mutex_unlock(&(sala.mx_aggiornamentoSala));
 }
-
-//stampa in una stringa le informazioni sul settore
-/*void stampaDescrizioneSettore(char* stringa, struct sala_cinema* s){
-	pthread_mutex_lock(&(s->mx_aggiornamentoSala));
-	sprintf(stringa,"Codice: %d, %s, posti liberi: %d, prezzo: %d, posti fila: %d\n",s->codice +1,s->nome,s->postiDisponibili, s->costoIntero, s->file[0].nPosti);
-	pthread_mutex_unlock(&(s->mx_aggiornamentoSala));
-}*/
-
-/*
- * Algoritmo che prenota i posti nello stadio: appena trova un posto libero
- * in una fila del settore specificato dall'utente, verifica che ci siano n
- * posti adiacenti accanto (dove n è specificato dal client); se ci sono
- * prenota tutto, altrimenti va avanti. Dopo aver scorso tutte le file,
- * se non trova n posti adiacenti restituisce 0 (esito negativo), altrimenti
- * 1. Ritorna -1 se nel settore non ci sono sufficienti posti.
- */
-/*int prenotaPosti(int prenotazione[2], int client){
-	int i,j,y;	//per ciclare su settore, fila e posto
-	int adiacentiLiberi = 0;	//contatore
-	int prenotati = 0;	//risultato
-	//estraggo i dati forniti dal client
-	//int nSettore = (prenotazione[0]);
-	int postiAdiacentiRichiesti = prenotazione[1];
-
-	//controllo se i posti sono sufficienti: non accadrà mai, perchè il controllo è
-	//già effettuato in server.c
-	pthread_mutex_lock(&sala.mx_aggiornamentoSala);
-	if (sala.postiDisponibili<postiAdiacentiRichiesti) {
-		printf("<SERVER-INFO> Il client %i ha richiesto più posti di quelli disponibili nel settore %s\n",client, sala.nome);
-		return -1;
-	}
-	pthread_mutex_unlock(&sala.mx_aggiornamentoSala);
-
-	//per tutte le file della sala
-	for (i = 0; i < sala.nFile; i++) {
-		//acquisisco il lock sulla fila
-		pthread_mutex_lock(&sala.file[i].mx_fila);
-		//se la fila ha più posti di quelli richiesti e se ci sono posti a sufficienza
-		if (sala.file[i].nPostiLiberi >= postiAdiacentiRichiesti){
-			//scandisco i posti della fila
-			for (j = 0; j < sala.file[i].nPosti; j++){
-				//se il posto j non è stato ancora prenotato
-				if (!sala.file[i].posti[j].is_prenotato){
-					for (y = j; y < (j+postiAdiacentiRichiesti); y++){
-						//conto quanti posti liberi adiacenti ci sono
-						if (!sala.file[i].posti[y].is_prenotato){
-							adiacentiLiberi++;
-						}
-					}
-					//se bastano i posti liberi adiacenti
-					if (adiacentiLiberi == postiAdiacentiRichiesti){
-						for (y = j; y < (j+postiAdiacentiRichiesti); y++) {
-							//prenoto il posto
-							sala.file[i].posti[y].is_prenotato == 1;
-							//la fila ha un posto disponibile in meno
-							sala.file[i].nPostiLiberi--;
-						}
-						prenotati = 1;
-						//aggiorno il settore
-						pthread_mutex_lock(&sala.mx_aggiornamentoSala);
-								sala.postiDisponibili = sala.postiDisponibili-postiAdiacentiRichiesti;
-						pthread_mutex_unlock(&sala.mx_aggiornamentoSala);
-						printf("<SERVER-UPDATE> Posti disponibili nel settore %d: %d\n",nSettore,sala.postiDisponibili);
-					}
-					//se abbiamo trovato i posti, stop
-					if (prenotati)
-						break;
-					//altrimenti resetto
-					adiacentiLiberi = 0;
-				}
-			}
-		}
-		pthread_mutex_unlock(&sala.file[i].mx_fila);
-
-		if (prenotati)
-			break;
-	}
-	return prenotati;
-}*/

@@ -28,6 +28,8 @@ struct sala_cinema{
 	struct fila* file;
 	int postiDisponibili;
 	pthread_mutex_t mx_aggiornamentoSala;
+	pthread_mutex_t mx_aggiornamentoFilePrenotazioni;
+	//pthread_mutex_t mx_aggiornamentoFileSala;
 };
 
 struct prenotazione{
@@ -41,6 +43,6 @@ struct prelazione {
 	char *id;
 	struct posto* posti_p;
 };
-unsigned int pre_index;
+char COD_PREN[CODLEN];
 struct prelazione *prelazioni; //lista prenotazioni attive
 #endif /*STADIOOLIMPICO_H_*/

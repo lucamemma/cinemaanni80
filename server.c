@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <errno.h>        /* gestione degli errori */
+#include <signal.h>
 
 #include "cinema.h"
 #include "gestioneSala.h"
@@ -22,7 +23,7 @@ int * input_posto_blank(char* s){
 	strcpy(p,s);
 	int i =0;
 	p = strtok(s, " ");
-	printf("[INPUT_POSTO] %s\n", p);
+	//printf("[INPUT_POSTO] %s\n", p);
 	while(p != NULL) {
     printf("%s\n", p);
 		if(i==0) ret[0] = atoi(p);
@@ -32,40 +33,49 @@ int * input_posto_blank(char* s){
 	}
 	return ret;
 }
+void sig_handler(int signo){
+		if (signo == SIGINT){
+				salva_sala();
+				salva_cod();
+		}
+		else if (signo == SIGINT){
+				salva_sala();
+				salva_cod();
+		}
+}
 
 //invia info sala
 int info(int socket) {
 	int i, j;
 	//manda numero file
+	pthread_mutex_lock(&(sala.mx_aggiornamentoSala));
 	if (send(socket, &(sala.nFile), sizeof(int),0)< 0) {
-		printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+		printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 		exit(1);
 	}
 	for(i=0; i<sala.nFile; i++){
 		//per ogni fila manda il numero posti
 		if (send(socket, &(sala.file[i].nPosti), sizeof(int),0)< 0) {
-			printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+			printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 			exit(1);
 		}
 		for(j=0; j<sala.file[i].nPosti; j++){
 			//INT codice, INT codice_fila,INT prenotato. manda i dati struttura posto
 			if (send(socket, &(sala.file[i].posti[j].codice), sizeof(int),0)< 0) {
-				printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+				printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 				exit(1);
 			}
 			if (send(socket, &(sala.file[i].posti[j].codice_fila), sizeof(int),0)< 0) {
-				printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+				printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 				exit(1);
 			}
 			if (send(socket, &(sala.file[i].posti[j].prenotato), sizeof(int),0)< 0) {
-				printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+				printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 				exit(1);
 			}
 		}
 	}
-
-	//pthread_mutex_lock(&(sala.mx_aggiornamentoSala));
- 	//pthread_mutex_unlock(&(sala.mx_aggiornamentoSala));
+	pthread_mutex_unlock(&(sala.mx_aggiornamentoSala));
 	return socket;
 }
 
@@ -77,13 +87,12 @@ char* get_codice_univoco(){  //numerico 0-9 ma string (più facile utilizzo)
 	//incrementa cod pren
 	n++;
 	sprintf(COD_PREN, "%d", n);
-	printf("[DEBUG CODICE PRENOTAZIONE UTENTE] %s\n", ret);
-	printf("[DEBUG CODICE PRENOTAZIONE PROSSIMO] %s\n", COD_PREN);
 	return ret;
 }
 
 int controlla_validita_posti(struct posto* pren, int n){ //TODO mutex
 	int i, valido=1;
+	pthread_mutex_lock(&(sala.mx_aggiornamentoSala));
 	for(i=0; i<n; i++){
 		//controllo indici validi
 		if((pren[i].codice_fila>=sala.nFile) || (pren[i].codice>=sala.file[i].nPosti)){
@@ -96,6 +105,7 @@ int controlla_validita_posti(struct posto* pren, int n){ //TODO mutex
 			return valido;
 		}
 	}
+	pthread_mutex_unlock(&(sala.mx_aggiornamentoSala));
 	return valido;
 }
 
@@ -104,7 +114,6 @@ void prenota_posti(struct posto* pren, int n){
 	for(i=0; i<n; i++){
 		//setto posti
 		sala.file[pren[i].codice_fila].posti[pren[i].codice].prenotato=1;
-		//printf("%s\n", );
 		}
 }
 void sprenota_posti(struct posto* pren, int n){
@@ -112,7 +121,6 @@ void sprenota_posti(struct posto* pren, int n){
 	for(i=0; i<n; i++){
 		//setto posti
 		sala.file[pren[i].codice_fila].posti[pren[i].codice].prenotato=0;
-		//printf("%s\n", );
 		}
 }
 void salva_prenotazione(struct posto* posti, int n, char *c){
@@ -123,11 +131,13 @@ void salva_prenotazione(struct posto* posti, int n, char *c){
 		exit(1);
 	}
 		/* scrive il numero */
+		pthread_mutex_lock(&(sala.mx_aggiornamentoFilePrenotazioni));
 		int i =0;
 		fprintf(fd, "\n%s\n%d\n", c, n);
 		for (i=0; i<n;i++){
 				fprintf(fd, "%d %d\n",posti[i].codice_fila, posti[i].codice);//, posti[i].prenotato);
 		}
+		pthread_mutex_unlock(&(sala.mx_aggiornamentoFilePrenotazioni));
 	fclose(fd);
 }
 
@@ -138,6 +148,7 @@ void salva_sala(){
 		exit(1);
 	}
 		int i,j;
+		pthread_mutex_lock(&(sala.mx_aggiornamentoSala));
 		fprintf(fd, "%d\n",sala.nFile);
 		for (i=0; i<sala.nFile;i++){
 			fprintf(fd, "%d ",sala.file[i].nPosti);
@@ -146,6 +157,7 @@ void salva_sala(){
 			}
 			fprintf(fd, "\n");
 		}
+		pthread_mutex_unlock(&(sala.mx_aggiornamentoSala));
 	fclose(fd);
 }
 
@@ -154,7 +166,7 @@ void accettaPrenotazioneEffettuata(int socket){
 	//riceve len di prenotazione
 	int n_posti,i;
 	if (recv(socket, &(n_posti), sizeof(int),0)< 0) {
-		printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+		printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 		exit(1);
 	}
 	//riceve i posti da prenotare
@@ -162,27 +174,29 @@ void accettaPrenotazioneEffettuata(int socket){
 
 	for(i=0; i<n_posti; i++){
 		if (recv(socket, &(prenotazione[i].codice), sizeof(int),0)< 0) {
-			printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+			printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 			exit(1);
 		}
 		if (recv(socket, &(prenotazione[i].codice_fila), sizeof(int),0)< 0) {
-			printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+			printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 			exit(1);
 		}
 		if (recv(socket, &(prenotazione[i].prenotato), sizeof(int),0)< 0) {
-			printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+			printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 			exit(1);
 		}
 		//printf("%d",pren);
 	}
-	for(i=0; i<n_posti;i++){
+	/*for(i=0; i<n_posti;i++){
 		printf("[DEBUG] FILA:%d POSTO:%d\n",prenotazione[i].codice_fila,prenotazione[i].codice );
-	}
+	}*/
 	//controlla validità posti
 	//int ok = controlla_validita_posti(prenotazione);
 	char conferma[CODLEN];
 	if(controlla_validita_posti(prenotazione, n_posti)){
-		prenota_posti(prenotazione, n_posti); // TODO MUTEX
+		pthread_mutex_lock(&(sala.mx_aggiornamentoSala));
+			prenota_posti(prenotazione, n_posti);
+		pthread_mutex_unlock(&(sala.mx_aggiornamentoSala));
 		strcpy(conferma, get_codice_univoco());
 		// MEMORIZZA PREN E COD salva prenotazione
 		salva_prenotazione(prenotazione, n_posti, conferma);
@@ -192,7 +206,7 @@ void accettaPrenotazioneEffettuata(int socket){
 	}
 
 	if (send(socket, conferma, sizeof(char)*CODLEN,0)< 0){
-		printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+		printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 		exit(1);
 	}
 
@@ -200,18 +214,16 @@ void accettaPrenotazioneEffettuata(int socket){
 
 void annullaPrenotazioneEffettuata(int socket){
 	printf("ANNULLA prenotazione effettuata\n");
-	/* TODO : mutex
-		-dato codice prenotazione
+	/* -dato codice prenotazione
 		-cerco nel file prenotazione
 		-se la trovo, la leggo
 				- pongo il codice di quella prenotazione a -1
 				- per ogni posto della prenotazione, porto a 0 il "prenotato" di quel posto nella sala
-		- TODO alla chiusura cancellare i record prenotazione con cod=-1
 	*/
 	//ricevo il codice prenotazione
 	char cod_pre[CODLEN];
 	if (recv(socket, cod_pre, sizeof(char)*CODLEN,0)< 0) {
-		printf("[<SERVER-ERR> Errore nella write dalla socket (-1) %s",strerror(errno));
+		printf("[SERV-ERR] Errore nella write dalla socket (-1) %s",strerror(errno));
 		exit(1);
 	}
 	// leggo il file
@@ -221,20 +233,12 @@ void annullaPrenotazioneEffettuata(int socket){
 	struct posto* posti_file = NULL;
 	char cod[CODLEN];
 	int flag = 0, i, n_posti, num_posti;
-/*
-char line[128];
-while ( fgets(line,sizeof(line),fd)!=NULL){
-	 fputs (line, stdout);
-}
-fclose (fd);
-*/
 
 			char line[128];
 			char* r = malloc(sizeof(char)*128);
 			//r = fgets(line,sizeof(line),fd);
-
+			pthread_mutex_lock(&(sala.mx_aggiornamentoFilePrenotazioni));
       while (r!=NULL){
-					printf("---- in -----\n");
 					r = fgets(line,sizeof(line),fd);
 					fputs (line, stdout);
 
@@ -245,11 +249,12 @@ fclose (fd);
 						sprintf(c, "%d", atoi(line)); //i to S
 						if(strcmp(cod_pre, c)==0){ //codice
 							flag=1;
+
 						}
 						fgets(line,sizeof(line),fd); //numero posti
 						fputs (line, stdout);
 						n_posti = atoi(line); //quante righe devo leggere per il prossimo record
-						printf("NPOSTI FILE%d\n",n_posti);
+						//printf("NPOSTI FILE%d\n",n_posti);
 						if(flag) {posti_file = malloc(sizeof(struct posto)*n_posti);num_posti=n_posti;}
 						int *p = malloc(sizeof(int)*2);
 						for(i=0; i<n_posti;i++){
@@ -266,10 +271,73 @@ fclose (fd);
 					}
          //fputs (line, stdout);
       }
-			printf("\nsprenotare\n");
+			pthread_mutex_unlock(&(sala.mx_aggiornamentoFilePrenotazioni));
+
 			sprenota_posti(posti_file,num_posti);
 			fclose (fd);
-			
+			fd = fopen("temp.txt","w");
+			FILE *fs = fopen(FILE_F,"r");
+			if(fd == NULL) exit(1);
+			char line_c[128];
+			char line_n[128];
+			char line_e[128];
+			r = malloc(sizeof(char)*128);
+			flag=0;
+			pthread_mutex_lock(&(sala.mx_aggiornamentoFilePrenotazioni));
+      while (r!=NULL){
+					printf("---- in -----\n");
+					r = fgets(line,sizeof(line),fs);
+					fputs (line, stdout);
+
+					if(strcmp(line,"\n")==0){  //allora prossima riga codice
+						r = fgets(line,sizeof(line),fs);
+						fputs (line, stdout);
+						strcpy(line_c,line);
+						char c[4];
+						sprintf(c, "%d", atoi(line)); //i to S
+						if(strcmp(cod_pre, c)==0){ //codice
+							flag=1;
+						}
+						else{
+							char line_e[128]="\n";
+							fputs(line_e,fd); //metto a capo
+							fputs (line, fd); //metto codice non prenotazione annullata
+						}
+						fgets(line,sizeof(line),fs); //numero posti
+						fputs (line, stdout);
+						strcpy(line_n,line);
+						if(!flag){fputs(line_n, fd);} //metto lunghezza }
+						n_posti = atoi(line); //quante righe devo leggere per il prossimo record
+
+						printf("SEC NPOSTI FILE: %d\n",n_posti);
+						for(i=0; i<n_posti;i++){
+								r = fgets(line,sizeof(line),fs);
+								if(!flag){
+									fputs (line, fd);
+								}
+						}
+				}
+				pthread_mutex_unlock(&(sala.mx_aggiornamentoFilePrenotazioni));
+         //fputs (line, stdout);
+      }
+
+			fclose(fs);
+			fclose(fd);
+			pthread_mutex_lock(&(sala.mx_aggiornamentoFilePrenotazioni));
+			int ret = remove(FILE_F);
+			if(ret) printf("OK! delete\n");
+			ret = rename("temp.txt", FILE_F);
+			if (ret) {printf("OK! rename\n");
+			pthread_mutex_unlock(&(sala.mx_aggiornamentoFilePrenotazioni));
+		}
+}
+void salva_cod(){
+	FILE *f = fopen("codice.txt","w");
+	if(f!=NULL){
+		fputs(COD_PREN,f);
+		fclose(f);
+	}
+	printf("CODICE NON SALVATO!! \n");
 }
 //funzione esuguita dai thread che gestiscono i client
 void* threadPrincipale(void* args){
@@ -283,31 +351,28 @@ void* threadPrincipale(void* args){
 	//while(1) {
 		while (1)	{
 			//leggo operazione da effettuare
-			printf("<SERVER-INFO> Connesso al client con thread numero %d\n",nClient);
+			printf("[SERV-INFO] Connesso al client con thread numero %d\n",nClient);
 
 			if (recv(sockmsg, op, sizeof(op),0)<0) {
-				printf("<SERVER-ERR> Errore nella read dalla socket (1) %s\n", strerror(errno));
+				printf("[SERV-ERR] Errore nella read dalla socket (1) %s\n", strerror(errno));
 				exit(1);
 			}
 			int operazione = atoi(op);
 			switch(operazione){
 				case 1:
-					//invia info al client
-					deb(DEB,"mando info sala");
 					info(sockmsg);
 					break;
 				case 2:
-					deb(DEB,"prenotazione posti sala");
-					accettaPrenotazioneEffettuata(sockmsg); //TODO
+					info(sockmsg);
+					accettaPrenotazioneEffettuata(sockmsg);
 					break;
 				case 3:
-					deb(DEB,"annulla prenotazione codice");
-					annullaPrenotazioneEffettuata(sockmsg); //TODO
+					annullaPrenotazioneEffettuata(sockmsg);
 					break;
 				default:
-					salva_sala();
+					//salva_sala();
 					close(sockmsg);
-					printf("<SERVER-INFO> Server %d: ho chiuso la socket di dialogo con il client %d\n",getpid(),nClient);
+					printf("[SERV-INFO] Server %d: ho chiuso la socket di dialogo con il client %d\n",getpid(),nClient);
 					void* ret = malloc(sizeof(void));
 					pthread_exit(ret);
 					break;
@@ -330,14 +395,14 @@ int main(int argc, char** argv) {
 
 	//correttezza parametri
 	if ( argc != 2 ) {
-		printf("<SERVER-ERR> Devi specificare <numero-della-porta>\n");
+		printf("[SERV-ERR] Devi specificare <numero-della-porta>\n");
 		exit(EXIT_FAILURE);
 	}
 
 	//creao la socket TCP per la famiglia di processi su Internet
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	if( sock < 0 ) {
-		printf("<SERVER-ERR> server %d: errore %s nel creare la socket\n", getpid(), strerror(errno));
+		printf("[SERV-ERR] server %d: errore %s nel creare la socket\n", getpid(), strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 
@@ -348,17 +413,17 @@ int main(int argc, char** argv) {
 
 	//assegno alla socket "sock" una porta contenuta nella struttura "server"
 	if( bind(sock, (struct sockaddr *)&server, sizeof(server))<0 ) {
-		printf("<SERVER-ERR> server %d: bind fallita\n", getpid());
+		printf("[SERV-ERR] server %d: bind fallita\n", getpid());
 		exit(EXIT_FAILURE);
 	}
 	//inizializzo il cinmea
-	inizializzaSala(); //inizializza sala TODO
+	inizializzaSala();
 	stampaSala(sala);
-	printf("<SERVER-INFO> server %d: pronto sulla porta %d\n", getpid(), ntohs(server.sin_port));
+	printf("[SERV-INFO] server %d: pronto sulla porta %d\n", getpid(), ntohs(server.sin_port));
 
 	//etichetto la socket come "di ascolto" TODO connessioni max
-	if( listen(sock, 4) <0 ) {
-		printf("<SERVER-ERR> server %d: errore %s nella listen\n",getpid(), strerror(errno));
+	if( listen(sock, 8) <0 ) {
+		printf("[SERV-ERR] server %d: errore %s nella listen\n",getpid(), strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 
@@ -366,11 +431,15 @@ int main(int argc, char** argv) {
 	while(1) {
 		//estraggo una connessione dalla coda, se non c'è rimango in attesa
 		if( (sockmsg = accept(sock, 0, 0)) <0 )	{
-			printf("<SERVER-ERR> server %d: errore %s nella accept\n",getpid(), strerror(errno));
+			printf("[SERV-ERR] server %d: errore %s nella accept\n",getpid(), strerror(errno));
 			exit(1);
 		}
-		printf("<SERVER-INFO> numero socket %d\n",sockmsg);
-		printf("<SERVER-INFO> server %d: accettata una nuova connessione\n",getpid());
+		printf("[SERV-INFO] numero socket %d\n",sockmsg);
+		printf("[SERV-INFO] server %d: accettata una nuova connessione\n",getpid());
+
+		signal(SIGINT, sig_handler);
+		signal(SIGQUIT, sig_handler);
+		signal(SIGSTOP, sig_handler);
 
 		//delego ad un thread detached e vado a gestire la connessione seguente
 		pthread_attr_init(&attr);
@@ -379,5 +448,5 @@ int main(int argc, char** argv) {
 		pthread_attr_destroy(&attr);
 	}
 	close(sock);
-	printf("<SERVER-INFO> server %d: ho chiuso la socket di ascolto\n",getpid());
+	printf("[SERV-INFO] server %d: ho chiuso la socket di ascolto\n",getpid());
 }
